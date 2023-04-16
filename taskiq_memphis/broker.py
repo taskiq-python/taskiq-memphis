@@ -1,15 +1,13 @@
-from typing import AsyncGenerator, Dict, Optional, Union
-from taskiq import AsyncBroker, BrokerMessage
-from memphis import Memphis, Headers
+from typing import AsyncGenerator, Optional
+
+from memphis import Headers, Memphis
 from memphis.consumer import Consumer
 from memphis.producer import Producer
 from memphis.station import Station
 from memphis.types import Retention, Storage
-from taskiq_memphis.exceptions import (
-    StartupNotCalledError,
-    TooLateConfigurationError,
-)
+from taskiq import AsyncBroker, BrokerMessage
 
+from taskiq_memphis.exceptions import StartupNotCalledError, TooLateConfigurationError
 from taskiq_memphis.models import (
     MemphisConsumerParameters,
     MemphisProduceMethodParameters,
@@ -21,7 +19,7 @@ from taskiq_memphis.models import (
 class MemphisBroker(AsyncBroker):
     """Broker that works with Memphis."""
 
-    def __init__(
+    def __init__(  # noqa: S107, WPS211
         self,
         memphis_host: str,
         username: str,
@@ -47,7 +45,6 @@ class MemphisBroker(AsyncBroker):
         :param password: password for memphis, default is connection
             token-based authentication
         :param port: port.
-        :param station_name: name of the station.
         :param reconnect: turn on/off reconnection while connection is lost.
         :param max_reconnect: maximum reconnection attempts.
         :param reconnect_interval_ms: interval in milliseconds
@@ -78,10 +75,8 @@ class MemphisBroker(AsyncBroker):
         self._destroy_producer_on_shutdown = destroy_producer_on_shutdown
         self._destroy_consumer_on_shutdown = destroy_consumer_on_shutdown
 
-        self._station_parameters: MemphisStorageParameters = (
-            MemphisStorageParameters(
-                name="taskiq",
-            )
+        self._station_parameters: MemphisStorageParameters = MemphisStorageParameters(
+            name="taskiq",
         )
 
         self._producer_parameters: MemphisProducerParameters = (
@@ -107,9 +102,7 @@ class MemphisBroker(AsyncBroker):
         self._is_consumer_started: bool = False
         self._is_started: bool = False
 
-        Memphis().consumer()
-
-    def configure_station(
+    def configure_station(  # noqa: WPS211
         self,
         name: str,
         retention_type: Retention = Retention.MAX_MESSAGE_AGE_SECONDS,
@@ -141,10 +134,12 @@ class MemphisBroker(AsyncBroker):
         :param send_schema_failed_msg_to_dls: send schema failed message
             to dead letter station or not.
         :param tiered_storage_enabled: tiered storage enabled or not.
+
+        :raises TooLateConfigurationError: if broker is already running.
         """
         if self._is_started:
             raise TooLateConfigurationError(
-                "Please call this method before startup."
+                "Please call this method before startup.",
             )
 
         self._station_parameters = MemphisStorageParameters(
@@ -174,10 +169,12 @@ class MemphisBroker(AsyncBroker):
 
         :param producer_name: name of the producer.
         :param generate_random_suffix: generate random suffix or not.
+
+        :raises TooLateConfigurationError: if broker is already running.
         """
         if self._is_started:
             raise TooLateConfigurationError(
-                "Please call this method before startup."
+                "Please call this method before startup.",
             )
 
         self._producer_parameters = MemphisProducerParameters(
@@ -185,7 +182,7 @@ class MemphisBroker(AsyncBroker):
             generate_random_suffix=generate_random_suffix,
         )
 
-    def configure_produce_method(
+    def configure_produce_method(  # noqa: WPS211
         self,
         generate_random_suffix: bool = False,
         ack_wait_sec: int = 15,
@@ -205,10 +202,12 @@ class MemphisBroker(AsyncBroker):
         :param headers: `Headers` instance from memphis.
         :param async_produce: produce message in async way or not.
         :param is_idempotency_turned_on: is idempotency turned on or not.
+
+        :raises TooLateConfigurationError: if broker is already running.
         """
         if self._is_started:
             raise TooLateConfigurationError(
-                "Please call this method before startup."
+                "Please call this method before startup.",
             )
 
         self._produce_method_parameters = MemphisProduceMethodParameters(
@@ -219,10 +218,10 @@ class MemphisBroker(AsyncBroker):
             is_idempotency_turned_on=is_idempotency_turned_on,
         )
 
-    def configure_consumer(
+    def configure_consumer(  # noqa: WPS211
         self,
         consumer_name: str,
-        consumer_group: str,
+        consumer_group: str = "",
         pull_interval_ms: int = 1000,
         batch_size: int = 10,
         batch_max_time_to_wait_ms: int = 5000,
@@ -238,10 +237,24 @@ class MemphisBroker(AsyncBroker):
         memphis consumer.
         Is will be used in listen method in your
         taskiq worker.
+
+        :param consumer_name: consumer name.
+        :param consumer_group: name of the consumer group.
+        :param pull_interval_ms: interval in milliseconds between pulls.
+        :param batch_size: pull batch size.
+        :param batch_max_time_to_wait_ms: max time in milliseconds
+            to wait between pulls.
+        :param max_ack_time_ms: max time for ack a message in milliseconds.
+        :param max_msg_deliveries: max number of message deliveries.
+        :param generate_random_suffix: concatenate a random suffix to consumer's name.
+        :param start_consume_from_sequence: start consuming from a specific sequence.
+        :param last_messages: consume the last N messages.
+
+        :raises TooLateConfigurationError: if broker is already running.
         """
         if self._is_started:
             raise TooLateConfigurationError(
-                "Please call this method before startup."
+                "Please call this method before startup.",
             )
 
         self._consumer_parameters = MemphisConsumerParameters(

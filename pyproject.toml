@@ -22,7 +22,7 @@ classifiers = [
     "Development Status :: 3 - Alpha",
 ]
 keywords = ["taskiq", "tasks", "distributed", "async", "memphis", "memphis-py"]
-packages = [{ include = "taskiq-memphis" }]
+packages = [{ include = "taskiq_memphis" }]
 
 [tool.poetry.dependencies]
 python = "^3.7"

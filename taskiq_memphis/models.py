@@ -1,7 +1,6 @@
-from pydantic import BaseModel
-
 from memphis import Headers
 from memphis.types import Retention, Storage
+from pydantic import BaseModel
 
 
 class MemphisStorageParameters(BaseModel):
