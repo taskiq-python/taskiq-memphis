@@ -1,19 +1,27 @@
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator, List, Optional
+from logging import getLogger
 
 from memphis import Headers, Memphis
 from memphis.consumer import Consumer
 from memphis.producer import Producer
 from memphis.station import Station
 from memphis.types import Retention, Storage
+from memphis.message import Message
 from taskiq import AsyncBroker, BrokerMessage
 
-from taskiq_memphis.exceptions import StartupNotCalledError, TooLateConfigurationError
+from taskiq_memphis.exceptions import (
+    StartupNotCalledError,
+    TooLateConfigurationError,
+)
 from taskiq_memphis.models import (
     MemphisConsumerParameters,
     MemphisProduceMethodParameters,
     MemphisProducerParameters,
     MemphisStorageParameters,
 )
+
+
+logger = getLogger("taskiq.memphis_broker")
 
 
 class MemphisBroker(AsyncBroker):
@@ -33,6 +41,7 @@ class MemphisBroker(AsyncBroker):
         cert_file: str = "",
         key_file: str = "",
         ca_file: str = "",
+        consumer_batch_size: int = 10,
         destroy_station_on_shutdown: bool = False,
         destroy_producer_on_shutdown: bool = True,
         destroy_consumer_on_shutdown: bool = True,
@@ -54,6 +63,7 @@ class MemphisBroker(AsyncBroker):
         :param key_file: path to tls key file.
         :param ca_file: path to tls ca file.
 
+        :param consumer_batch_size: batch size for the consumer.
         :param destroy_station_on_shutdown: close station on shutdown.
         :param destroy_producer_on_shutdown: close producer on shutdown.
         :param destroy_consumer_on_shutdown: close consumer on shutdown.
@@ -71,12 +81,15 @@ class MemphisBroker(AsyncBroker):
         self._key_file: str = key_file
         self._ca_file: str = ca_file
 
+        self._consumer_batch_size = consumer_batch_size
         self._destroy_station_on_shutdown = destroy_station_on_shutdown
         self._destroy_producer_on_shutdown = destroy_producer_on_shutdown
         self._destroy_consumer_on_shutdown = destroy_consumer_on_shutdown
 
-        self._station_parameters: MemphisStorageParameters = MemphisStorageParameters(
-            name="taskiq",
+        self._station_parameters: MemphisStorageParameters = (
+            MemphisStorageParameters(
+                name="taskiq",
+            )
         )
 
         self._producer_parameters: MemphisProducerParameters = (
@@ -98,8 +111,6 @@ class MemphisBroker(AsyncBroker):
         self._producer: Optional[Producer] = None
         self._consumer: Optional[Consumer] = None
 
-        self._is_producer_started: bool = False
-        self._is_consumer_started: bool = False
         self._is_started: bool = False
 
     def configure_station(  # noqa: WPS211
@@ -184,7 +195,6 @@ class MemphisBroker(AsyncBroker):
 
     def configure_produce_method(  # noqa: WPS211
         self,
-        generate_random_suffix: bool = False,
         ack_wait_sec: int = 15,
         headers: Optional[Headers] = None,
         async_produce: bool = False,
@@ -197,7 +207,6 @@ class MemphisBroker(AsyncBroker):
         Is will be used in kick method in your
         taskiq tasks.
 
-        :param generate_random_suffix: generate random suffix or not.
         :param ack_wait_sec: wait ack time in seconds.
         :param headers: `Headers` instance from memphis.
         :param async_produce: produce message in async way or not.
@@ -211,7 +220,6 @@ class MemphisBroker(AsyncBroker):
             )
 
         self._produce_method_parameters = MemphisProduceMethodParameters(
-            generate_random_suffix=generate_random_suffix,
             ack_wait_sec=ack_wait_sec,
             headers=headers or Headers(),
             async_produce=async_produce,
@@ -291,19 +299,17 @@ class MemphisBroker(AsyncBroker):
             **self._station_parameters.dict(),
         )
 
-        if not self._is_producer_started:
+        if not self._producer:
             self._producer: Producer = await self._memphis.producer(  # type: ignore
                 station_name=self._station_parameters.name,
                 **self._producer_parameters.dict(),
             )
-            self._is_producer_started = True
 
-        if not self._is_consumer_started:
+        if not self._consumer:
             self._consumer: Consumer = await self._memphis.consumer(  # type: ignore
                 station_name=self._station_parameters.name,
                 **self._consumer_parameters.dict(),
             )
-            self._is_consumer_started = True
 
         self._is_started = True
 
@@ -335,10 +341,15 @@ class MemphisBroker(AsyncBroker):
         :raises StartupNotCalledError: if startup wasn't called.
         :param message: message to send.
         """
-        if not self._is_producer_started:
+        if not self._producer:
             raise StartupNotCalledError(
                 "Please call startup method before kick tasks.",
             )
+
+        await self._producer.produce(
+            message=message.message,
+            **self._produce_method_parameters.dict(),
+        )
 
     async def listen(self) -> AsyncGenerator[bytes, None]:
         """Listen to new messages in the station.
@@ -349,8 +360,22 @@ class MemphisBroker(AsyncBroker):
         :yields: parsed broker message.
         :raises StartupNotCalledError: if startup wasn't called.
         """
-        if not self._is_consumer_started:
+        if not self._consumer:
             raise StartupNotCalledError(
                 "Please call startup method before start listening.",
             )
-        yield b"test"
+
+        while True:
+            try:
+                memphis_messages: List[Message] = await self._consumer.fetch(
+                    batch_size=self._consumer_batch_size,
+                )
+            except Exception as exc:
+                logger.warning(
+                    f"Can't receive messages from memphis due to {exc}",
+                )
+                continue
+
+            for memphis_message in memphis_messages:
+                if bytearray_message := memphis_message.get_data():
+                    yield b"".join(bytearray_message)

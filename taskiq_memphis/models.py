@@ -21,7 +21,6 @@ class MemphisStorageParameters(BaseModel):
 class MemphisProduceMethodParameters(BaseModel):
     """Parameters for memphis producer `produce` method."""
 
-    generate_random_suffix: bool = False
     ack_wait_sec: int = 15
     headers: Headers = Headers()
     async_produce: bool = False
