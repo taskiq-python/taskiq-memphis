@@ -1,19 +1,18 @@
-from typing import AsyncGenerator, Callable, List, Optional, TypeVar
+import asyncio
+import secrets
 from logging import getLogger
+from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, TypeVar, Union
 
 from memphis import Headers, Memphis
 from memphis.consumer import Consumer
+from memphis.exceptions import MemphisError
+from memphis.message import Message
 from memphis.producer import Producer
 from memphis.station import Station
 from memphis.types import Retention, Storage
-from memphis.message import Message
-from memphis.exceptions import MemphisError
 from taskiq import AsyncBroker, AsyncResultBackend, BrokerMessage
 
-from taskiq_memphis.exceptions import (
-    StartupNotCalledError,
-    TooLateConfigurationError,
-)
+from taskiq_memphis.exceptions import StartupNotCalledError, TooLateConfigurationError
 from taskiq_memphis.models import (
     MemphisConsumerParameters,
     MemphisProduceMethodParameters,
@@ -95,10 +94,10 @@ class MemphisBroker(AsyncBroker):
         self._destroy_producer_on_shutdown = destroy_producer_on_shutdown
         self._destroy_consumer_on_shutdown = destroy_consumer_on_shutdown
 
-        self._station_parameters: MemphisStorageParameters = (
-            MemphisStorageParameters(
-                name="taskiq",
-            )
+        self.messages_queue: asyncio.Queue[bytes] = asyncio.Queue()
+
+        self._station_parameters: MemphisStorageParameters = MemphisStorageParameters(
+            name="taskiq",
         )
 
         self._producer_parameters: MemphisProducerParameters = (
@@ -126,7 +125,7 @@ class MemphisBroker(AsyncBroker):
         self,
         name: str,
         retention_type: Retention = Retention.MAX_MESSAGE_AGE_SECONDS,
-        retention_value: int = 604800,
+        retention_value: int = 1,
         storage_type: Storage = Storage.DISK,
         replicas: int = 1,
         idempotency_window_ms: int = 120000,
@@ -202,7 +201,7 @@ class MemphisBroker(AsyncBroker):
             generate_random_suffix=generate_random_suffix,
         )
 
-    def configure_produce_method(  # noqa: WPS211
+    def configure_produce_method(
         self,
         ack_wait_sec: int = 15,
         headers: Optional[Headers] = None,
@@ -218,7 +217,6 @@ class MemphisBroker(AsyncBroker):
         :param ack_wait_sec: wait ack time in seconds.
         :param headers: `Headers` instance from memphis.
         :param async_produce: produce message in async way or not.
-        :param is_idempotency_turned_on: is idempotency turned on or not.
 
         :raises TooLateConfigurationError: if broker is already running.
         """
@@ -302,16 +300,16 @@ class MemphisBroker(AsyncBroker):
             ca_file=self._ca_file,
         )
 
-        if not self.is_worker_process:
-            try:
-                self._station = await self._memphis.station(
-                    **self._station_parameters.dict(),
-                )
-            except MemphisError as exc:
-                logger.warning(
-                    f"Can't create station with name {self._station_parameters.name} "
-                    f"due to {exc}",
-                )
+        try:
+            self._station = await self._memphis.station(
+                **self._station_parameters.dict(),
+            )
+        except MemphisError as exc:
+            logger.warning(
+                f"Can't create station with "  # noqa: WPS237
+                f"name {self._station_parameters.name} "
+                f"due to {exc}",
+            )
 
         if not self._producer and not self.is_worker_process:
             self._producer: Producer = await self._memphis.producer(  # type: ignore
@@ -320,9 +318,25 @@ class MemphisBroker(AsyncBroker):
             )
 
         if not self._consumer and self.is_worker_process:
+            consumer_parameters = self._consumer_parameters.dict()
+
+            # It is necessary because memphis library can't destroy
+            # consumers if consumers were created using inner
+            # memphis functionality.
+            generate_random_suffix = consumer_parameters.pop(
+                "generate_random_suffix",
+            )
+            consumer_name = consumer_parameters.pop("consumer_name")
+            if generate_random_suffix:
+                consumer_name = "{0}_{1}".format(
+                    consumer_name,
+                    secrets.token_urlsafe(8).lower(),
+                )
+
             self._consumer: Consumer = await self._memphis.consumer(  # type: ignore
                 station_name=self._station_parameters.name,
-                **self._consumer_parameters.dict(),
+                consumer_name=consumer_name,
+                **consumer_parameters,
             )
 
         self._is_started = True
@@ -331,16 +345,16 @@ class MemphisBroker(AsyncBroker):
         """Close all connections on shutdown."""
         await super().shutdown()
 
-        if self._destroy_station_on_shutdown and self._station:
-            await self._station.destroy()
-
         if self._destroy_producer_on_shutdown and self._producer:
             await self._producer.destroy()
 
         if self._destroy_consumer_on_shutdown and self._consumer:
             await self._consumer.destroy()
 
-        await self._memphis.close
+        if self._destroy_station_on_shutdown and self._station:
+            await self._station.destroy()
+
+        await self._memphis.close()
 
     async def kick(self, message: BrokerMessage) -> None:
         """Send message to the station.
@@ -361,7 +375,7 @@ class MemphisBroker(AsyncBroker):
             )
 
         await self._producer.produce(
-            message=message.message,
+            message=bytearray(message.message),
             **self._produce_method_parameters.dict(),
         )
 
@@ -379,20 +393,29 @@ class MemphisBroker(AsyncBroker):
                 "Please call startup method before start listening.",
             )
 
-        while True:
-            try:
-                memphis_messages: List[Message] = await self._consumer.fetch(
-                    batch_size=self._consumer_batch_size,
-                )
-            except Exception as exc:
-                logger.warning(
-                    f"Can't receive messages from memphis due to {exc}",
-                )
-                continue
+        # consume method creates background task with asyncio.create_task
+        self._consumer.consume(self.process_memphis_messages)
 
-            if not memphis_messages:
-                continue
+        while True:  # noqa: WPS457
+            memphis_message = await self.messages_queue.get()
+            yield memphis_message
 
-            for memphis_message in memphis_messages:
-                if bytearray_message := memphis_message.get_data():
-                    yield b"".join(bytearray_message)
+    async def process_memphis_messages(
+        self,
+        memphis_messages: Optional[List[Message]],
+        *args: Union[Exception, Dict[Any, Any]],
+    ) -> None:
+        """Process messages from memphis station.
+
+        Convert bytearray to bytes and put message into the queue.
+
+        :param memphis_messages: messages from memphis.
+        :param args: additional arguments from memphis.
+        """
+        if not memphis_messages:
+            return
+
+        for memphis_message in memphis_messages:
+            bytearray_message: bytearray = memphis_message.get_data()
+            await self.messages_queue.put(bytes(bytearray_message))
+            await memphis_message.ack()
