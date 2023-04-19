@@ -1,3 +1,4 @@
+from typing import Any, Dict
 from memphis import Headers
 from memphis.types import Retention, Storage
 from pydantic import BaseModel
@@ -22,9 +23,8 @@ class MemphisProduceMethodParameters(BaseModel):
     """Parameters for memphis producer `produce` method."""
 
     ack_wait_sec: int = 15
-    headers: Headers = Headers()
+    headers: Dict[Any, Any] = {}
     async_produce: bool = False
-    is_idempotency_turned_on: bool = True
 
 
 class MemphisProducerParameters(BaseModel):

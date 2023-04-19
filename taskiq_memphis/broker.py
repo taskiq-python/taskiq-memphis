@@ -1,4 +1,4 @@
-from typing import AsyncGenerator, List, Optional
+from typing import AsyncGenerator, Callable, List, Optional, TypeVar
 from logging import getLogger
 
 from memphis import Headers, Memphis
@@ -7,7 +7,8 @@ from memphis.producer import Producer
 from memphis.station import Station
 from memphis.types import Retention, Storage
 from memphis.message import Message
-from taskiq import AsyncBroker, BrokerMessage
+from memphis.exceptions import MemphisError
+from taskiq import AsyncBroker, AsyncResultBackend, BrokerMessage
 
 from taskiq_memphis.exceptions import (
     StartupNotCalledError,
@@ -19,6 +20,8 @@ from taskiq_memphis.models import (
     MemphisProducerParameters,
     MemphisStorageParameters,
 )
+
+_T = TypeVar("_T")  # noqa: WPS111
 
 
 logger = getLogger("taskiq.memphis_broker")
@@ -34,6 +37,8 @@ class MemphisBroker(AsyncBroker):
         connection_token: str = "",
         password: str = "",
         port: int = 6666,
+        result_backend: Optional[AsyncResultBackend[_T]] = None,
+        task_id_generator: Optional[Callable[[], str]] = None,
         reconnect: bool = True,
         max_reconnect: int = 10,
         reconnect_interval_ms: int = 1500,
@@ -54,6 +59,8 @@ class MemphisBroker(AsyncBroker):
         :param password: password for memphis, default is connection
             token-based authentication
         :param port: port.
+        :param result_backend: custom result backend.
+        :param task_id_generator: custom task_id genertaor.
         :param reconnect: turn on/off reconnection while connection is lost.
         :param max_reconnect: maximum reconnection attempts.
         :param reconnect_interval_ms: interval in milliseconds
@@ -68,6 +75,8 @@ class MemphisBroker(AsyncBroker):
         :param destroy_producer_on_shutdown: close producer on shutdown.
         :param destroy_consumer_on_shutdown: close consumer on shutdown.
         """
+        super().__init__(result_backend, task_id_generator)
+
         self._memphis_host: str = memphis_host
         self._username: str = username
         self._connection_token: str = connection_token
@@ -198,7 +207,6 @@ class MemphisBroker(AsyncBroker):
         ack_wait_sec: int = 15,
         headers: Optional[Headers] = None,
         async_produce: bool = False,
-        is_idempotency_turned_on: bool = True,
     ) -> None:
         """Configure memphis producer `produce` method.
 
@@ -223,7 +231,6 @@ class MemphisBroker(AsyncBroker):
             ack_wait_sec=ack_wait_sec,
             headers=headers or Headers(),
             async_produce=async_produce,
-            is_idempotency_turned_on=is_idempotency_turned_on,
         )
 
     def configure_consumer(  # noqa: WPS211
@@ -295,17 +302,24 @@ class MemphisBroker(AsyncBroker):
             ca_file=self._ca_file,
         )
 
-        self._station = await self._memphis.station(
-            **self._station_parameters.dict(),
-        )
+        if not self.is_worker_process:
+            try:
+                self._station = await self._memphis.station(
+                    **self._station_parameters.dict(),
+                )
+            except MemphisError as exc:
+                logger.warning(
+                    f"Can't create station with name {self._station_parameters.name} "
+                    f"due to {exc}",
+                )
 
-        if not self._producer:
+        if not self._producer and not self.is_worker_process:
             self._producer: Producer = await self._memphis.producer(  # type: ignore
                 station_name=self._station_parameters.name,
                 **self._producer_parameters.dict(),
             )
 
-        if not self._consumer:
+        if not self._consumer and self.is_worker_process:
             self._consumer: Consumer = await self._memphis.consumer(  # type: ignore
                 station_name=self._station_parameters.name,
                 **self._consumer_parameters.dict(),
@@ -374,6 +388,9 @@ class MemphisBroker(AsyncBroker):
                 logger.warning(
                     f"Can't receive messages from memphis due to {exc}",
                 )
+                continue
+
+            if not memphis_messages:
                 continue
 
             for memphis_message in memphis_messages:
