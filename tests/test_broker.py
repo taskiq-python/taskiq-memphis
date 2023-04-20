@@ -1,8 +1,9 @@
 import asyncio
 import uuid
+
 import pytest
-from taskiq import BrokerMessage
 from memphis.producer import Producer
+from taskiq import BrokerMessage
 
 from taskiq_memphis.broker import MemphisBroker
 

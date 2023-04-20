@@ -125,7 +125,7 @@ class MemphisBroker(AsyncBroker):
         self,
         name: str,
         retention_type: Retention = Retention.MAX_MESSAGE_AGE_SECONDS,
-        retention_value: int = 1,
+        retention_value: int = 604800,
         storage_type: Storage = Storage.DISK,
         replicas: int = 1,
         idempotency_window_ms: int = 120000,
@@ -177,7 +177,7 @@ class MemphisBroker(AsyncBroker):
     def configure_producer(
         self,
         producer_name: str,
-        generate_random_suffix: bool = False,
+        generate_random_suffix: bool = True,
     ) -> None:
         """Configure memphis producer.
 

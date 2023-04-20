@@ -1,8 +1,8 @@
 import os
 from typing import AsyncGenerator
 from uuid import uuid4
-import pytest
 
+import pytest
 from memphis import Memphis
 from memphis.consumer import Consumer
 from memphis.producer import Producer
