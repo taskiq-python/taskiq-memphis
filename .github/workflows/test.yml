@@ -27,42 +27,6 @@ jobs:
       - name: Run lint check
         run: poetry run pre-commit run -a ${{ matrix.cmd }}
   pytest:
-    services:
-      memphis-metadata:
-        image: memphisos/memphis-metadata:15-docker
-        ports:
-          - '5005:5005'
-        env:
-          POSTGRESQL_USERNAME: "memphis"
-          POSTGRESQL_PASSWORD: "memphis"
-          POSTGRESQL_DATABASE: "memphis"
-          POSTGRESQL_PORT_NUMBER: 5005
-      memphis:
-        image: "memphisos/memphis:stable"
-        ports:
-          - "9000:9000"
-          - "6666:6666"
-          - "7770:7770"
-        env:
-          ROOT_PASSWORD: "memphis"
-          ANALYTICS: true
-          USER_PASS_BASED_AUTHL: true
-          CONNECTION_TOKEN: "memphis"
-          METADATA_DB_HOST: "memphis-metadata"
-          
-      memphis-rest-gateway:
-        image: "memphisos/memphis-rest-gateway:latest"
-        ports:
-          - "4444:4444"
-        env:
-          JWT_SECRET: "JWT_TEST_PURPOSE"
-          REFRESH_JWT_SECRET: "REFRESH_JWT_TEST_PURPOSE"
-          USER_PASS_BASED_AUTH: true
-          CONNECTION_TOKEN: "memphis"
-          ROOT_USER: "root"
-          ROOT_PASSWORD: "memphis"
-          MEMPHIS_HOST: "localhost"
-          HTTP_PORT: 4444
     permissions:
       checks: write
       pull-requests: write
@@ -83,6 +47,11 @@ jobs:
           cache: "poetry"
       - name: Install deps
         run: poetry install
+      - name: Download memphis docker-compose file
+        run: |
+          curl -s https://memphisdev.github.io/memphis-docker/docker-compose-dev.yml -o docker-compose.yaml
+      - name: Run docker-compose file
+        run: docker compose -f docker-compose.yaml -p memphis up -d
       - name: Run pytest check
         run: poetry run pytest -vv -n auto --cov="taskiq_memphis" .
       - name: Generate report
@@ -94,3 +63,6 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
           verbose: true
+      - name: Stop and remove running containers
+        run: |
+          docker compose down
