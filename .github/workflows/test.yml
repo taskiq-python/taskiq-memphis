@@ -45,7 +45,6 @@ jobs:
           - "7770:7770"
         env:
           ROOT_PASSWORD: "memphis"
-          DOCKER_ENV: true
           ANALYTICS: true
           USER_PASS_BASED_AUTHL: true
           CONNECTION_TOKEN: "memphis"
@@ -62,7 +61,7 @@ jobs:
           CONNECTION_TOKEN: "memphis"
           ROOT_USER: "root"
           ROOT_PASSWORD: "memphis"
-          MEMPHIS_HOST: "memphis"
+          MEMPHIS_HOST: "127.0.0.1"
           HTTP_PORT: 4444
     permissions:
       checks: write
