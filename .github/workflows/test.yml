@@ -61,7 +61,7 @@ jobs:
           CONNECTION_TOKEN: "memphis"
           ROOT_USER: "root"
           ROOT_PASSWORD: "memphis"
-          MEMPHIS_HOST: "127.0.0.1"
+          MEMPHIS_HOST: "localhost"
           HTTP_PORT: 4444
     permissions:
       checks: write
