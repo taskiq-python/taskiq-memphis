@@ -397,8 +397,7 @@ class MemphisBroker(AsyncBroker):
         self._consumer.consume(self.process_memphis_messages)
 
         while True:  # noqa: WPS457
-            memphis_message = await self.messages_queue.get()
-            yield memphis_message
+            yield await self.messages_queue.get()
 
     async def process_memphis_messages(
         self,
