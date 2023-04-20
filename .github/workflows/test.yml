@@ -32,7 +32,7 @@ jobs:
         image: memphisos/memphis-metadata:15-docker
         ports:
           - '5005:5005'
-        environment:
+        env:
           - POSTGRESQL_USERNAME=memphis
           - POSTGRESQL_PASSWORD=memphis
           - POSTGRESQL_DATABASE=memphis
@@ -43,7 +43,7 @@ jobs:
           - "9000:9000"
           - "6666:6666"
           - "7770:7770"
-        environment:
+        env:
           - ROOT_PASSWORD=memphis
           - DOCKER_ENV=true
           - ANALYTICS=true
@@ -55,7 +55,7 @@ jobs:
         image: "memphisos/memphis-rest-gateway:latest"
         ports:
           - "4444:4444"
-        environment:
+        env:
           - JWT_SECRET=JWT_TEST_PURPOSE
           - REFRESH_JWT_SECRET=REFRESH_JWT_TEST_PURPOSE
           - USER_PASS_BASED_AUTH=true
