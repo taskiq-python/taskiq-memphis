@@ -33,10 +33,10 @@ jobs:
         ports:
           - '5005:5005'
         env:
-          - POSTGRESQL_USERNAME=memphis
-          - POSTGRESQL_PASSWORD=memphis
-          - POSTGRESQL_DATABASE=memphis
-          - POSTGRESQL_PORT_NUMBER=5005
+          POSTGRESQL_USERNAME: "memphis"
+          POSTGRESQL_PASSWORD: "memphis"
+          POSTGRESQL_DATABASE: "memphis"
+          POSTGRESQL_PORT_NUMBER: 5005
       memphis:
         image: "memphisos/memphis:stable"
         ports:
@@ -44,26 +44,26 @@ jobs:
           - "6666:6666"
           - "7770:7770"
         env:
-          - ROOT_PASSWORD=memphis
-          - DOCKER_ENV=true
-          - ANALYTICS=true
-          - USER_PASS_BASED_AUTH=true
-          - CONNECTION_TOKEN=memphis
-          - METADATA_DB_HOST=memphis-metadata
+          ROOT_PASSWORD: "memphis"
+          DOCKER_ENV: true
+          ANALYTICS: true
+          USER_PASS_BASED_AUTHL: true
+          CONNECTION_TOKEN: "memphis"
+          METADATA_DB_HOST: "memphis-metadata"
           
       memphis-rest-gateway:
         image: "memphisos/memphis-rest-gateway:latest"
         ports:
           - "4444:4444"
         env:
-          - JWT_SECRET=JWT_TEST_PURPOSE
-          - REFRESH_JWT_SECRET=REFRESH_JWT_TEST_PURPOSE
-          - USER_PASS_BASED_AUTH=true
-          - CONNECTION_TOKEN=memphis
-          - ROOT_USER=root
-          - ROOT_PASSWORD=memphis
-          - MEMPHIS_HOST=memphis
-          - HTTP_PORT=4444
+          JWT_SECRET: "JWT_TEST_PURPOSE"
+          REFRESH_JWT_SECRET: "REFRESH_JWT_TEST_PURPOSE"
+          USER_PASS_BASED_AUTH: true
+          CONNECTION_TOKEN: "memphis"
+          ROOT_USER: "root"
+          ROOT_PASSWORD: "memphis"
+          MEMPHIS_HOST: "memphis"
+          HTTP_PORT: 4444
     permissions:
       checks: write
       pull-requests: write
