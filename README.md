@@ -81,7 +81,7 @@ Memphis `station` parameters you can configure:
 Memphis `producer` parameters you can configure:
 * `producer_name` - producer name. Required.
 * `generate_random_suffix` - add suffix to producer name. Default - `True`.  
-**DON'T SET THIS VARIABLE TO `FALSE` IF YOU WANT TO USE MORE THAN ON PRODUCER.**
+**DON'T SET THIS VARIABLE TO `FALSE` IF YOU WANT TO USE MORE THAN ONE PRODUCER.**
 
 Memphis `produce` method parameters you can configure:
 * `ack_wait_sec` - wait ack time in seconds.
@@ -97,6 +97,7 @@ Memphis `consumer` parameters you can configure:
 * `batch_max_time_to_wait_ms` - max time in milliseconds to wait between pulls.
 * `max_ack_time_ms` - max time for ack a message in milliseconds.
 * `max_msg_deliveries` - max number of message deliveries.
-* `generate_random_suffix` - concatenate a random suffix to consumer's name.
+* `generate_random_suffix` - concatenate a random suffix to consumer's name.  
+**DON'T SET THIS VARIABLE TO `FALSE` IF YOU WANT TO USE MORE THAN ONE CONSUMER.**
 * `start_consume_from_sequence` - start consuming from a specific sequence.
 * `last_messages` - consume the last N messages.
