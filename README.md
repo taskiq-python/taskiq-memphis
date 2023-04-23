@@ -1,6 +1,7 @@
 # taskiq-memphis
 
-This library provides you with memphis broker for taskiq.
+This library provides you with memphis broker for taskiq.  
+**You need python version >=3.8**
 
 ### Usage:
 ```python
