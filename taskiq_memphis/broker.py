@@ -306,9 +306,9 @@ class MemphisBroker(AsyncBroker):
             )
         except MemphisError as exc:
             logger.warning(
-                f"Can't create station with "  # noqa: WPS237
-                f"name {self._station_parameters.name} "
-                f"due to {exc}",
+                "Can't create station with name %s due to %s",
+                self._station_parameters.name,
+                exc,
             )
 
         if not self._producer and not self.is_worker_process:
